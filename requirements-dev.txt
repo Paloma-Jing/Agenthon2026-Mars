@@ -1,0 +1,11 @@
+# Python 3.13; clone the pinned official repository before installing.
+-r requirements-numeric-agent.txt
+numpy==2.1.3
+pandas==2.2.3
+pyarrow==18.1.0
+scipy==1.18.1
+jsonschema==4.23.0
+pytest==9.1.1
+matplotlib==3.11.2
+qfbench2-common[data] @ https://github.com/Agenthon-2026/Agenthon2026-public/archive/refs/tags/v2.6.0.tar.gz#subdirectory=common
+-e ./track2-forecasting-public[test]

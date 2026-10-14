@@ -1,0 +1,108 @@
+# QFBench 2.0 Track-2 submission image: numeric forecasting controller.
+#
+# The harness passes the verb as the first argument after the image reference, so this file
+# declares no ENTRYPOINT: `forecast` is a real executable on PATH. Measured contract points:
+#   - LABEL qfbench2.interface_version="2.0" is required; without it no run record is produced.
+#   - A Docker VOLUME, including one inherited from the base image, makes a Final upload Failed.
+#     This file declares none and asserts none after the build.
+#   - /input is read-only and /output is a writable bind; the process runs as a non-root user.
+#   - The evaluation host is linux/amd64; build with --platform linux/amd64.
+#
+#   docker buildx build --platform linux/amd64 -f Dockerfile.submission -t <repo>:<tag> --push .
+#
+# Inputs are read from the staged unit: /input/card.toml, /input/panels/*.parquet, /input/text/.
+# The commander reads indexed, dated text before the numerical executor starts.
+FROM python:3.13-slim-bookworm
+
+LABEL qfbench2.interface_version="2.0"
+LABEL qfbench2.track=forecasting
+LABEL qfbench2.verb=forecast
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH=/opt
+
+# Pinned. A submission image that floats its dependencies fails at the worst possible time:
+# after the pull, inside the unit's wall clock. qfbench2-common is installed from the same
+# release tarball the track repository pins (v2.6.0), in tarball form because this base image
+# ships no git.
+#
+# SPLIT INTO FOUR COMMANDS ON PURPOSE. Measured 2026-10-11 while publishing this image: the one
+# 691 MB layer these lines used to form could not be pushed reliably -- three attempts stalled
+# with the client waiting on registry-1.docker.io and the layer never landed, while the nine
+# smaller layers beside it went up repeatedly. Splitting does not shrink the image; it bounds
+# what one failed transfer can cost, and it lets a retry skip the groups that already arrived.
+# The cache mount keeps pip's wheels out of the image (`--no-cache-dir` would re-download
+# pyarrow on every retry, which is the opposite of what a retry needs).
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir \
+        "numpy==2.1.3" \
+        "pandas==2.2.3"
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir \
+        "pyarrow==18.1.0" \
+        "scipy==1.18.1"
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir \
+        "statsmodels==0.15.0" \
+        "scikit-learn==1.9.1" \
+        "arch==8.0.0"
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir \
+        "smolagents==1.26.0" \
+        "openai==3.28.0" \
+        "qfbench2-common @ https://github.com/Agenthon-2026/Agenthon2026-public/archive/refs/tags/v2.6.0.tar.gz#subdirectory=common"
+
+# The track package, pinned by commit, in a SECOND command on purpose. It is a separate public
+# repository (`Agenthon-2026/track2-forecasting-public`); it is NOT inside the toolkit tarball
+# above, whose root holds only `common/`, `docs/` and `starter-packs/`. Measured on the first
+# build to pass the interface checks: the image built cleanly and then died on the first
+# `forecast` call with `ModuleNotFoundError: No module named 'qfbench2_track_forecasting'`,
+# because `numeric_agent.engine` imports it for panel reading and the draw ceiling, and the
+# local smoke tests passed only because the checkout sits beside the working tree.
+#
+# `--no-deps` is what keeps the pins above authoritative: a plain resolve of this package would
+# be free to re-evaluate its `numpy>=2.1`-style floors. A full commit SHA, not a short one and
+# not a branch: the tarball is verified byte-identical to the tested checkout, and a moving ref
+# would make the image unreproducible. Same reasoning as the toolkit line: the base image ships
+# no `git`, so this is the tarball form, which pip can fetch over plain HTTP.
+RUN pip install --no-cache-dir --no-deps \
+        "qfbench2-track-forecasting @ https://github.com/Agenthon-2026/track2-forecasting-public/archive/30c8019d997f930eab9ba569d089d12298d86d8c.tar.gz#subdirectory=."
+
+COPY numeric_agent /opt/numeric_agent
+
+# `COPY` preserves the source mode, and this tree is edited on a host whose sandbox creates some
+# files `0600`. Measured: `house.py` arrived as `-rw-------`, so the image built and passed
+# `forecast --help` (argparse exits before the import) and then died on a real run as an
+# unprivileged user with `PermissionError: [Errno 13] /opt/numeric_agent/house.py`. The verb
+# must not depend on the builder's umask, so readability is stated here instead of inherited.
+RUN chmod -R a+rX /opt/numeric_agent
+
+# The verb, as an executable on PATH. exec preserves the exit status the contract reads.
+RUN printf '#!/bin/sh\nexec python3 -m numeric_agent "$@"\n' > /usr/local/bin/forecast \
+ && chmod +x /usr/local/bin/forecast
+
+# The platform's own launch shape is `--read-only --user 65534:65534 --cap-drop=ALL
+# --security-opt no-new-privileges --tmpfs /tmp:size=64m` (DEVELOPMENT-RUNTIME.md, "Run it
+# locally the way the platform runs it"). That uid has no passwd entry, so HOME is unset or
+# /nonexistent while the root filesystem is read-only: any import that writes a user cache dies
+# at startup. Point every cache at the one writable filesystem that exists besides /output.
+ENV HOME=/tmp \
+    XDG_CACHE_HOME=/tmp/.cache \
+    MPLCONFIGDIR=/tmp/.mpl \
+    HF_HOME=/tmp/.hf \
+    NUMBA_CACHE_DIR=/tmp/.numba
+
+RUN mkdir -p /work && chown 65534:65534 /work
+
+USER 65534:65534
+
+# Declared after USER on purpose: WORKDIR creates the directory when it is missing, and it must
+# be writable by the uid that will actually run.
+WORKDIR /work
+
+CMD ["forecast", "--help"]

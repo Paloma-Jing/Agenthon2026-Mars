@@ -1,0 +1,9 @@
+[
+  {
+    "name": "nvidia/nemotron-3-super-120b-a12b",
+    "version": "rl-030326-fp8",
+    "training_cutoff": "unpublished",
+    "access": "api",
+    "revision": "rl-030326-fp8"
+  }
+]

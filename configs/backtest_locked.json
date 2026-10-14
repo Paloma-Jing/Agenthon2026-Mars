@@ -1,0 +1,22 @@
+{
+  "purpose": "Locked phase-C backtest configuration: fold layout, seeds, and reference method.",
+  "reference_method": "random_walk",
+  "methods": ["random_walk", "ewma", "ar", "ridge", "garch", "gbm", "ridge_factors", "var"],
+  "seeds": [17, 42, 2026],
+  "draws": 200,
+  "max_folds": 5,
+  "min_origin_rows": 70,
+  "units": [
+    "t2-F3-conundrum-joint-2005",
+    "t2-F2-whatever-it-takes-2012",
+    "t2-F1-ai-mom-2024",
+    "t2-F1-cpi-glidepath-2023"
+  ],
+  "weights": {"marginal": 0.5, "joint": 0.3, "tail": 0.2},
+  "notes": [
+    "Non-overlapping outer folds, newest first, each H steps apart.",
+    "Training slices are truncated at the origin; the panel is truncated to the origin date.",
+    "local_proxy_composite is the paired weighted mean ratio to random_walk, not an official score.",
+    "Seeds 17/2026 use separate output directories; resume only continues the same seed/config."
+  ]
+}

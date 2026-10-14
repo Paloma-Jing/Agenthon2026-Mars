@@ -1,0 +1,7 @@
+# Only application source is sent to the Docker builder.
+**
+!Dockerfile.submission
+!numeric_agent/
+!numeric_agent/**
+numeric_agent/**/__pycache__/
+numeric_agent/**/*.pyc

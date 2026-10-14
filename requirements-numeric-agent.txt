@@ -1,0 +1,6 @@
+# Install inside .venv-agent layered on the existing agenthon_mars environment.
+smolagents==1.26.0
+openai==3.28.0
+statsmodels==0.15.0
+scikit-learn==1.9.1
+arch==8.0.0
